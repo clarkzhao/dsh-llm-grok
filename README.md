@@ -65,6 +65,78 @@ npx @deepseek-ai/dsh plugin --profile web add .
 > 注意：如果你之前通过 `llm-pi-ai` settings 添加过名为 `grok` 的 provider，
 > 需要先移除，避免 provider route 冲突。
 
+## 关联本地 Grok 订阅
+
+插件本身不直接读取 `~/.grok/auth.json`，它通过 DSH 的凭据系统获取 Grok 订阅 token。
+
+### 1. 确保本地已有 Grok 登录态
+
+```bash
+grok login
+```
+
+登录后 token 会保存在：
+
+```text
+~/.grok/auth.json
+```
+
+### 2. 把 token 配置给 DSH
+
+推荐写入 DSH 凭据文件：
+
+```bash
+# ~/.dsh/.credentials.yaml
+GROK_SESSION_TOKEN: <token>
+```
+
+也可以用环境变量（启动 DSH 前）：
+
+```bash
+export GROK_SESSION_TOKEN="$(python3 -c 'import json,os; d=json.load(open(os.path.expanduser("~/.grok/auth.json"))); print(next(v["key"] for v in d.values() if isinstance(v,dict) and v.get("key")))')"
+```
+
+### 3. 插件如何使用
+
+请求时插件通过：
+
+```text
+ctx.credentials.resolve('GROK_SESSION_TOKEN')
+```
+
+拿到 token 后作为：
+
+```text
+Authorization: Bearer <token>
+```
+
+发送到：
+
+```text
+https://cli-chat-proxy.grok.com/v1
+```
+
+同时带上 Grok 订阅端点要求的专用 headers：
+
+```text
+X-XAI-Token-Auth: xai-grok-cli
+x-authenticateresponse: authenticate-response
+x-grok-client-version: 1.0.4
+x-grok-model-override: grok-4.6 / grok-4.5
+```
+
+这样后端就会把它识别为 **Grok 订阅用户**，而不是普通 API Key 用户。
+
+### 如果没有配置会怎样
+
+插件会报：
+
+```text
+dsh-llm-grok: missing credential GROK_SESSION_TOKEN
+```
+
+所以外部用户安装插件后，还需要完成上面的 token 配置，才能真正使用自己的 Grok 订阅额度。
+
 ## 配置
 
 插件默认配置在 `cordis.patch.yml` 中，也可以在 profile 的
