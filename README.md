@@ -1,58 +1,50 @@
 # dsh-llm-grok
 
-独立 DeepSeek Harness 插件骨架：把 Grok 订阅额度接入 DSH 的 LLM 提供方。
+独立 DeepSeek Harness 插件：把 Grok 订阅额度接入 DSH 的 LLM 提供方。
 
-当前形态是 **独立 repo / bundle 插件**，不需要修改 DSH 源码。它通过 DSH 的
-`dsh plugin` 机制安装到 profile，并注册 `grok` provider。
+已发布：
+
+- GitHub：https://github.com/clarkzhao/dsh-llm-grok
+- npm：`dsh-llm-grok@0.1.0`
+- GitHub topic：`dsh-plugin`（便于 DSH 插件市场发现）
 
 ## 特性
 
-- 支持 `grok-4.6`、`grok-4.5`
+- 支持模型：
+  - `grok-4.6`
+  - `grok-4.5`
 - 支持思考强度：
   - `grok-4.6`: `low / medium / high / xhigh`
   - `grok-4.5`: `low / medium / high`
-- 直接连接 Grok 订阅端点，不再依赖本地 Python 代理：
+- 直接连接 Grok 订阅端点，不依赖本地 Python 代理：
   - 默认 `baseURL`：`https://cli-chat-proxy.grok.com/v1`
   - 通过 `undici` `ProxyAgent` 走你的 Clash `7890` 代理
-- 支持 `grok-4.6`、`grok-4.5`
-- 支持思考强度：
-  - `grok-4.6`: `low / medium / high / xhigh`
-  - `grok-4.5`: `low / medium / high`
-
-## 目录结构
-
-```text
-dsh-llm-grok/
-├── package.json           # 声明 dsh.bundle，可被 dsh plugin 安装
-├── cordis.patch.yml       # 插入 llm-grok 插件行
-├── tsconfig.json
-├── src/
-│   ├── index.ts           # Cordis 插件入口，注册 grok provider
-│   ├── adapter.ts         # GrokAdapter（LlmAdapter 实现）
-│   ├── serialize.ts       # DSH 消息 → OpenAI chat-completions 请求
-│   ├── translate.ts       # SSE → DSH StreamChunk
-│   └── types.ts           # wire 类型
-```
-
-## 开发
-
-```bash
-npm install
-npm run build
-```
 
 ## 安装到 DSH
 
-在包含本 repo 的目录执行：
+### 从 npm 安装（推荐）
 
 ```bash
-dsh plugin --profile web add ./dsh-llm-grok
+dsh plugin --profile web add dsh-llm-grok
 ```
 
-或者使用其他 profile：
+其他 profile：
 
 ```bash
-dsh plugin --profile myprofile add ./dsh-llm-grok
+dsh plugin --profile myprofile add dsh-llm-grok
+```
+
+### 从 GitHub 安装
+
+```bash
+dsh plugin --profile web add github:clarkzhao/dsh-llm-grok
+```
+
+### 从本地源码安装
+
+```bash
+cd /path/to/dsh-llm-grok
+dsh plugin --profile web add .
 ```
 
 安装后 DSH 会自动把 `cordis.patch.yml` 作为 bundle layer 应用，新增
@@ -93,7 +85,28 @@ dsh plugin --profile myprofile add ./dsh-llm-grok
           high: high
 ```
 
+## 开发
+
+```bash
+npm install
+npm run build
+```
+
+## 目录结构
+
+```text
+dsh-llm-grok/
+├── package.json           # 声明 dsh.bundle，可被 dsh plugin 安装
+├── cordis.patch.yml       # 插入 llm-grok 插件行
+├── tsconfig.json
+├── src/
+│   ├── index.ts           # Cordis 插件入口，注册 grok provider
+│   ├── adapter.ts         # GrokAdapter（LlmAdapter 实现）
+│   ├── serialize.ts       # DSH 消息 → OpenAI chat-completions 请求
+│   ├── translate.ts       # SSE → DSH StreamChunk
+│   └── types.ts           # wire 类型
+```
+
 ## TODO / 后续
 
 - [ ] 补测试：SSE 解析、消息序列化、配置校验。
-- [ ] 发布到 npm，支持 `dsh plugin add dsh-llm-grok`。
