@@ -8,10 +8,9 @@
     - id: llm-grok
       name: dsh-llm-grok
       config:
-        # Local Grok subscription proxy (verified working in current DSH).
-        # Direct mode is implemented in GrokAdapter; set baseURL to
-        # https://cli-chat-proxy.grok.com/v1 to try it.
-        baseURL: http://127.0.0.1:8765/v1
+        # Direct Grok subscription endpoint through Clash/7890 proxy.
+        # No local Python proxy is required.
+        baseURL: https://cli-chat-proxy.grok.com/v1
         apiKeyEnv: GROK_SESSION_TOKEN
         proxy: http://127.0.0.1:7890
         models:

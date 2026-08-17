@@ -16,7 +16,7 @@ export const name = 'llm-grok'
 export const inject = ['llm']
 
 const PROVIDER = 'grok'
-const DEFAULT_BASE_URL = 'http://127.0.0.1:8765/v1'
+const DEFAULT_BASE_URL = 'https://cli-chat-proxy.grok.com/v1'
 const DEFAULT_PROXY = 'http://127.0.0.1:7890'
 const DEFAULT_API_KEY_ENV = 'GROK_SESSION_TOKEN'
 

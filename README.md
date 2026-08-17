@@ -11,13 +11,13 @@
 - 支持思考强度：
   - `grok-4.6`: `low / medium / high / xhigh`
   - `grok-4.5`: `low / medium / high`
-- 默认使用本地代理（当前 DSH 已验证）：
-  - `baseURL`: `http://127.0.0.1:8765/v1`
-  - 需要运行 `scripts/grok_dsh_proxy.py`
-- 已实现直连模式（实验性）：
-  - `GrokAdapter` 支持通过 `undici` `ProxyAgent` 直接连 `https://cli-chat-proxy.grok.com/v1`
-  - 把 `baseURL` 改为直连地址即可尝试
-  - 注意：直连模式在当前 DSH 热加载环境下尚未验证通过，默认不启用
+- 直接连接 Grok 订阅端点，不再依赖本地 Python 代理：
+  - 默认 `baseURL`：`https://cli-chat-proxy.grok.com/v1`
+  - 通过 `undici` `ProxyAgent` 走你的 Clash `7890` 代理
+- 支持 `grok-4.6`、`grok-4.5`
+- 支持思考强度：
+  - `grok-4.6`: `low / medium / high / xhigh`
+  - `grok-4.5`: `low / medium / high`
 
 ## 目录结构
 
@@ -32,8 +32,6 @@ dsh-llm-grok/
 │   ├── serialize.ts       # DSH 消息 → OpenAI chat-completions 请求
 │   ├── translate.ts       # SSE → DSH StreamChunk
 │   └── types.ts           # wire 类型
-└── scripts/
-    └── grok_dsh_proxy.py  # 可选：本地 Grok 订阅代理（兼容模式）
 ```
 
 ## 开发
@@ -72,7 +70,7 @@ dsh plugin --profile myprofile add ./dsh-llm-grok
 - id: llm-grok
   name: dsh-llm-grok
   config:
-    baseURL: http://127.0.0.1:8765/v1
+    baseURL: https://cli-chat-proxy.grok.com/v1
     apiKeyEnv: GROK_SESSION_TOKEN
     proxy: http://127.0.0.1:7890
     models:
