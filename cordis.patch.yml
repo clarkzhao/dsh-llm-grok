@@ -1,0 +1,33 @@
+# dsh-llm-grok bundle layer.
+# Installed via `dsh plugin --profile <name> add ./dsh-llm-grok`.
+#
+# The plugin registers provider route `grok` on DSH's LLM seam.
+# If you previously added a `grok` provider through `llm-pi-ai` settings,
+# remove that pi-ai provider first to avoid a duplicate route.
+- insert:
+    - id: llm-grok
+      name: dsh-llm-grok
+      config:
+        # Base URL of the local Grok subscription proxy. Keep the proxy
+        # running (`python3 scripts/grok_dsh_proxy.py --port 8765`).
+        baseURL: http://127.0.0.1:8765/v1
+        apiKeyEnv: GROK_SESSION_TOKEN
+        proxy: http://127.0.0.1:7890
+        models:
+          - id: grok-4.6
+            name: Grok 4.6
+            contextWindow: 500000
+            maxTokens: 128000
+            reasoningEfforts:
+              low: low
+              medium: medium
+              high: high
+              xhigh: xhigh
+          - id: grok-4.5
+            name: Grok 4.5
+            contextWindow: 500000
+            maxTokens: 128000
+            reasoningEfforts:
+              low: low
+              medium: medium
+              high: high
