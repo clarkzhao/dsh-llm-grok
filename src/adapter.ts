@@ -1,10 +1,9 @@
 /**
  * GrokAdapter: OpenAI-compatible chat-completions adapter for DSH's LLM seam.
  *
- * It can talk either to:
- * - the local `grok_dsh_proxy.py` endpoint (`http://127.0.0.1:8765/v1`), or
- * - directly to `https://cli-chat-proxy.grok.com/v1` through a Node
- *   `undici` ProxyAgent (for example `http://127.0.0.1:7890`).
+ * It talks directly to `https://cli-chat-proxy.grok.com/v1` through a Node
+ * `undici` ProxyAgent (for example `http://127.0.0.1:7890`). No local Python
+ * proxy is required.
  */
 
 import { EventSourceParserStream } from 'eventsource-parser/stream'
