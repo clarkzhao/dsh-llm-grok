@@ -1,14 +1,14 @@
 /**
  * GrokAdapter: OpenAI-compatible chat-completions adapter for DSH's LLM seam.
  *
- * By default it talks to the local `grok_dsh_proxy.py` endpoint
- * (`http://127.0.0.1:8765/v1`), which is the current working solution for
- * using a Grok subscription through DSH. The plugin may later be extended to
- * speak directly to `https://cli-chat-proxy.grok.com/v1` using a Node proxy
- * agent (TODO).
+ * It can talk either to:
+ * - the local `grok_dsh_proxy.py` endpoint (`http://127.0.0.1:8765/v1`), or
+ * - directly to `https://cli-chat-proxy.grok.com/v1` through a Node
+ *   `undici` ProxyAgent (for example `http://127.0.0.1:7890`).
  */
 
 import { EventSourceParserStream } from 'eventsource-parser/stream'
+import { ProxyAgent, fetch as undiciFetch } from 'undici'
 import {
   LlmAdapter,
   LlmError,
@@ -41,14 +41,34 @@ export interface GrokAdapterOptions {
 }
 
 const DONE = '[DONE]'
+const GROK_CLIENT_VERSION = '1.0.4'
+const GROK_DIRECT_HOST = 'cli-chat-proxy.grok.com'
 
 function endpoint(baseURL: string, path: '/chat/completions' | '/models'): string {
   return `${baseURL.replace(/\/+$/, '')}${path}`
 }
 
+function isDirectGrok(baseURL: string): boolean {
+  return baseURL.includes(GROK_DIRECT_HOST)
+}
+
+function grokHeaders(apiKey: string, model: string): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${apiKey}`,
+    'X-XAI-Token-Auth': 'xai-grok-cli',
+    'x-authenticateresponse': 'authenticate-response',
+    'x-grok-client-version': GROK_CLIENT_VERSION,
+    'x-grok-model-override': model,
+  }
+}
+
 export class GrokAdapter extends LlmAdapter {
+  private readonly dispatcher: ProxyAgent | undefined
+
   constructor(private readonly options: GrokAdapterOptions) {
     super()
+    this.dispatcher = options.proxy ? new ProxyAgent(options.proxy) : undefined
   }
 
   override providerInfo(provider: string): LlmProviderInfo {
@@ -94,19 +114,35 @@ export class GrokAdapter extends LlmAdapter {
       : model?.reasoningEfforts?.[String(options.reasoningEffort)] ?? String(options.reasoningEffort)
 
     const body = serializeRequest(options, effort)
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    }
+    const direct = isDirectGrok(this.options.baseURL)
+    const headers: Record<string, string> = direct
+      ? grokHeaders(apiKey, options.model)
+      : {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      }
 
     let response: Response
     try {
-      response = await fetch(endpoint(this.options.baseURL, '/chat/completions'), {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        signal: options.signal,
-      })
+      const url = endpoint(this.options.baseURL, '/chat/completions')
+      if (direct && this.dispatcher) {
+        response = await undiciFetch(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          signal: options.signal,
+          dispatcher: this.dispatcher,
+        }) as unknown as Response
+      } else {
+        // Use undici's own fetch (not global fetch) so ambient HTTP_PROXY
+        // handling does not accidentally proxy localhost requests.
+        response = await undiciFetch(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          signal: options.signal,
+        }) as unknown as Response
+      }
     } catch (error) {
       throw new LlmError(`Grok connection failed: ${String(error)}`, 'TRANSPORT')
     }

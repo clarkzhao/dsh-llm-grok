@@ -1,8 +1,10 @@
 /**
  * dsh-llm-grok plugin entry.
  *
- * Registers a `grok` provider route on DSH's LLM seam. The adapter talks to
- * the local Grok subscription proxy by default; see README for setup.
+ * Registers a `grok` provider route on DSH's LLM seam. By default it talks
+ * directly to Grok's subscription chat proxy through the configured HTTP(S)
+ * proxy (e.g. `http://127.0.0.1:7890`). A local proxy base URL can still be
+ * configured for compatibility.
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -15,6 +17,7 @@ export const inject = ['llm']
 
 const PROVIDER = 'grok'
 const DEFAULT_BASE_URL = 'http://127.0.0.1:8765/v1'
+const DEFAULT_PROXY = 'http://127.0.0.1:7890'
 const DEFAULT_API_KEY_ENV = 'GROK_SESSION_TOKEN'
 
 export interface Config {
@@ -39,7 +42,7 @@ const catalogModel = z.object({
 export const Config: z<Config> = z.object({
   baseURL: z.string().default(DEFAULT_BASE_URL),
   apiKeyEnv: z.string().role('credential-ref').default(DEFAULT_API_KEY_ENV),
-  proxy: z.string(),
+  proxy: z.string().default(DEFAULT_PROXY),
   defaultContextWindow: z.number().step(1).min(1).default(500000),
   defaultMaxTokens: z.number().step(1).min(1).default(128000),
   models: z.array(catalogModel).default([
@@ -77,7 +80,7 @@ export function apply(ctx: Context, config: Config): void {
   const adapter = new GrokAdapter({
     baseURL: config.baseURL ?? DEFAULT_BASE_URL,
     apiKeyEnv,
-    proxy: config.proxy,
+    proxy: config.proxy ?? DEFAULT_PROXY,
     defaultContextWindow: config.defaultContextWindow,
     defaultMaxTokens: config.defaultMaxTokens,
     models: config.models,

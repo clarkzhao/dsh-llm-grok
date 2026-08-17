@@ -11,9 +11,13 @@
 - 支持思考强度：
   - `grok-4.6`: `low / medium / high / xhigh`
   - `grok-4.5`: `low / medium / high`
-- 复用当前已验证的本地代理方案：
-  - `scripts/grok_dsh_proxy.py` 负责走 `7890` 代理并注入 Grok 订阅所需 headers
-  - 插件默认 `baseURL` 指向 `http://127.0.0.1:8765/v1`
+- 默认使用本地代理（当前 DSH 已验证）：
+  - `baseURL`: `http://127.0.0.1:8765/v1`
+  - 需要运行 `scripts/grok_dsh_proxy.py`
+- 已实现直连模式（实验性）：
+  - `GrokAdapter` 支持通过 `undici` `ProxyAgent` 直接连 `https://cli-chat-proxy.grok.com/v1`
+  - 把 `baseURL` 改为直连地址即可尝试
+  - 注意：直连模式在当前 DSH 热加载环境下尚未验证通过，默认不启用
 
 ## 目录结构
 
@@ -29,7 +33,7 @@ dsh-llm-grok/
 │   ├── translate.ts       # SSE → DSH StreamChunk
 │   └── types.ts           # wire 类型
 └── scripts/
-    └── grok_dsh_proxy.py  # 本地 Grok 订阅代理（沿用当前方案）
+    └── grok_dsh_proxy.py  # 可选：本地 Grok 订阅代理（兼容模式）
 ```
 
 ## 开发
@@ -41,14 +45,7 @@ npm run build
 
 ## 安装到 DSH
 
-先启动本地代理：
-
-```bash
-cd dsh-llm-grok
-python3 scripts/grok_dsh_proxy.py --port 8765
-```
-
-然后在包含本 repo 的目录执行：
+在包含本 repo 的目录执行：
 
 ```bash
 dsh plugin --profile web add ./dsh-llm-grok
@@ -100,8 +97,5 @@ dsh plugin --profile myprofile add ./dsh-llm-grok
 
 ## TODO / 后续
 
-- [ ] 在 `GrokAdapter` 中直接支持 `https://cli-chat-proxy.grok.com/v1`
-      并通过 Node proxy agent（例如 `undici` 的 `ProxyAgent`）走 `7890`，
-      从而不再依赖外部 Python 代理进程。
 - [ ] 补测试：SSE 解析、消息序列化、配置校验。
 - [ ] 发布到 npm，支持 `dsh plugin add dsh-llm-grok`。
