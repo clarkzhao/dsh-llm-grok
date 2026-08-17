@@ -3,9 +3,21 @@
  * This is intentionally a small subset; extend as needed.
  */
 
+export interface WireTextPart {
+  type: 'text'
+  text: string
+}
+
+export interface WireImageUrlPart {
+  type: 'image_url'
+  image_url: { url: string }
+}
+
+export type WireContentPart = WireTextPart | WireImageUrlPart
+
 export interface WireMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
-  content?: string
+  content?: string | WireContentPart[]
   tool_call_id?: string
   tool_calls?: WireToolCall[]
   reasoning_content?: string

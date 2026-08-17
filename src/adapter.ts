@@ -18,7 +18,7 @@ import {
   type LlmResolvedModelInfo,
   type StreamChunk,
 } from '@deepseek-ai/dsh-llm'
-import { serializeRequest } from './serialize.js'
+import { serializeRequest, type AttachmentReader } from './serialize.js'
 import { translate } from './translate.js'
 
 export interface GrokCatalogModel {
@@ -37,11 +37,13 @@ export interface GrokAdapterOptions {
   defaultMaxTokens?: number
   models?: GrokCatalogModel[]
   resolveApiKey: () => Promise<string>
+  resolveAttachments?: () => AttachmentReader | undefined
 }
 
 const DONE = '[DONE]'
 const GROK_CLIENT_VERSION = '1.0.4'
 const GROK_DIRECT_HOST = 'cli-chat-proxy.grok.com'
+const INPUT_MODALITIES = ['text', 'image'] as const
 
 function endpoint(baseURL: string, path: '/chat/completions' | '/models'): string {
   return `${baseURL.replace(/\/+$/, '')}${path}`
@@ -80,6 +82,7 @@ export class GrokAdapter extends LlmAdapter {
       provider,
       id: model.id,
       name: model.name ?? model.id,
+      inputModalities: INPUT_MODALITIES,
     }))
   }
 
@@ -93,6 +96,7 @@ export class GrokAdapter extends LlmAdapter {
       provider,
       id: model,
       name: found?.name ?? model,
+      inputModalities: INPUT_MODALITIES,
       ...found?.contextWindow !== undefined ? { context: { contextWindow: found.contextWindow } } : {},
       ...found?.maxTokens !== undefined ? { defaultMaxTokens: found.maxTokens } : {},
       ...found?.reasoningEfforts !== undefined
@@ -112,7 +116,7 @@ export class GrokAdapter extends LlmAdapter {
       ? undefined
       : model?.reasoningEfforts?.[String(options.reasoningEffort)] ?? String(options.reasoningEffort)
 
-    const body = serializeRequest(options, effort)
+    const body = await serializeRequest(options, effort, this.options.resolveAttachments?.())
     const direct = isDirectGrok(this.options.baseURL)
     const headers: Record<string, string> = direct
       ? grokHeaders(apiKey, options.model)

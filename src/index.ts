@@ -85,6 +85,7 @@ export function apply(ctx: Context, config: Config): void {
     defaultMaxTokens: config.defaultMaxTokens,
     models: config.models,
     resolveApiKey,
+    resolveAttachments: () => ctx.get('attachments'),
   })
 
   ctx.llm.registerAdapter([PROVIDER], adapter)

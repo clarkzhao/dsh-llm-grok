@@ -1,146 +1,68 @@
 # dsh-llm-grok
 
-独立 DeepSeek Harness 插件：把 Grok 订阅额度接入 DSH 的 LLM 提供方。
-
-已发布：
+DeepSeek Harness 插件：把 **Grok 订阅额度** 接成 DSH 的 LLM 提供方。
 
 - GitHub：https://github.com/clarkzhao/dsh-llm-grok
-- npm：`dsh-llm-grok@0.1.0`
-- GitHub topic：`dsh-plugin`（便于 DSH 插件市场发现）
+- npm：`dsh-llm-grok`
+- topic：`dsh-plugin`
 
-## 特性
+Grok 4.6 / 4.5 在本插件里是原生多模态：用户贴图和 tool-result 里的图会随同一次 `/chat/completions` 发给订阅端点。图不是先 OCR 成字再交给文本模型，也不会多出一个识图工具。
 
-- 支持模型：
-  - `grok-4.6`
-  - `grok-4.5`
-- 支持思考强度：
-  - `grok-4.6`: `low / medium / high / xhigh`
-  - `grok-4.5`: `low / medium / high`
-- 直接连接 Grok 订阅端点，不依赖本地 Python 代理：
-  - 默认 `baseURL`：`https://cli-chat-proxy.grok.com/v1`
-  - 通过 `undici` `ProxyAgent` 走你的 Clash `7890` 代理
+## 能力
 
-## 安装到 DSH
+| | grok-4.6 | grok-4.5 |
+|---|---|---|
+| 思考强度 | low / medium / high / xhigh | low / medium / high |
+| 上下文 / 输出 | 500K / 128K | 同左 |
+| 输入模态 | text + image | text + image |
 
-外部用户如果还没有全局安装 `dsh`，推荐使用 `npx @deepseek-ai/dsh` 来执行。
+- 默认 `baseURL`：`https://cli-chat-proxy.grok.com/v1`
+- 走本机 HTTP 代理（默认 Clash `http://127.0.0.1:7890`），不依赖 Python 旁路
+- 会话日志只存附件引用（`sha256:`）。像素只在发请求时从 `ctx.attachments` 读出，编成 `image_url` data URL
+- 缺附件服务、或图出现在 system / assistant 消息里：`UNSUPPORTED_CONTENT`
 
-### 从 npm 安装（推荐）
+## 安装
 
 ```bash
-# 方式一：已全局安装 dsh
 dsh plugin --profile web add dsh-llm-grok
-
-# 方式二：未全局安装，使用 npx
+# 未全局安装 dsh 时：
 npx @deepseek-ai/dsh plugin --profile web add dsh-llm-grok
 ```
 
-其他 profile：
+其他来源：`github:clarkzhao/dsh-llm-grok`，或在仓库目录执行 `dsh plugin --profile web add .`。把 `web` 换成你的 profile 名即可。
 
-```bash
-dsh plugin --profile myprofile add dsh-llm-grok
-# 或
-npx @deepseek-ai/dsh plugin --profile myprofile add dsh-llm-grok
-```
+安装后 bundle 会写入 `llm-grok` 并注册 `grok` provider。若曾在 `llm-pi-ai` 里加过同名 `grok`，先删掉，避免路由冲突。
 
-### 从 GitHub 安装
+## 凭据
 
-```bash
-dsh plugin --profile web add github:clarkzhao/dsh-llm-grok
-# 或
-npx @deepseek-ai/dsh plugin --profile web add github:clarkzhao/dsh-llm-grok
-```
+插件**不读** `~/.grok/auth.json`。它只解析 DSH 凭据 `GROK_SESSION_TOKEN`。
 
-### 从本地源码安装
+1. `grok login`（token 会落到 `~/.grok/auth.json`，方便你复制）
+2. 写入 `~/.dsh/.credentials.yaml`：
 
-```bash
-cd /path/to/dsh-llm-grok
-dsh plugin --profile web add .
-# 或
-npx @deepseek-ai/dsh plugin --profile web add .
-```
+   ```yaml
+   GROK_SESSION_TOKEN: <token>
+   ```
 
-安装后 DSH 会自动把 `cordis.patch.yml` 作为 bundle layer 应用，新增
-`llm-grok` 插件行并注册 `grok` provider。
+   或启动 DSH 前 `export GROK_SESSION_TOKEN=...`
 
-> 注意：如果你之前通过 `llm-pi-ai` settings 添加过名为 `grok` 的 provider，
-> 需要先移除，避免 provider route 冲突。
+未配置时请求会失败：`dsh-llm-grok: missing credential GROK_SESSION_TOKEN`。
 
-## 关联本地 Grok 订阅
-
-插件本身不直接读取 `~/.grok/auth.json`，它通过 DSH 的凭据系统获取 Grok 订阅 token。
-
-### 1. 确保本地已有 Grok 登录态
-
-```bash
-grok login
-```
-
-登录后 token 会保存在：
-
-```text
-~/.grok/auth.json
-```
-
-### 2. 把 token 配置给 DSH
-
-推荐写入 DSH 凭据文件：
-
-```bash
-# ~/.dsh/.credentials.yaml
-GROK_SESSION_TOKEN: <token>
-```
-
-也可以用环境变量（启动 DSH 前）：
-
-```bash
-export GROK_SESSION_TOKEN="$(python3 -c 'import json,os; d=json.load(open(os.path.expanduser("~/.grok/auth.json"))); print(next(v["key"] for v in d.values() if isinstance(v,dict) and v.get("key")))')"
-```
-
-### 3. 插件如何使用
-
-请求时插件通过：
-
-```text
-ctx.credentials.resolve('GROK_SESSION_TOKEN')
-```
-
-拿到 token 后作为：
+发往订阅端点时使用：
 
 ```text
 Authorization: Bearer <token>
-```
-
-发送到：
-
-```text
-https://cli-chat-proxy.grok.com/v1
-```
-
-同时带上 Grok 订阅端点要求的专用 headers：
-
-```text
 X-XAI-Token-Auth: xai-grok-cli
 x-authenticateresponse: authenticate-response
 x-grok-client-version: 1.0.4
-x-grok-model-override: grok-4.6 / grok-4.5
+x-grok-model-override: grok-4.6 | grok-4.5
 ```
 
-这样后端就会把它识别为 **Grok 订阅用户**，而不是普通 API Key 用户。
-
-### 如果没有配置会怎样
-
-插件会报：
-
-```text
-dsh-llm-grok: missing credential GROK_SESSION_TOKEN
-```
-
-所以外部用户安装插件后，还需要完成上面的 token 配置，才能真正使用自己的 Grok 订阅额度。
+后端据此按 **订阅用户** 计费，而不是普通 API Key。
 
 ## 配置
 
-插件默认配置在 `cordis.patch.yml` 中，也可以在 profile 的
-`cordis.patch.yml` 或 home 层覆盖：
+默认在插件的 `cordis.patch.yml`。可在 profile 或 home 层覆盖：
 
 ```yaml
 - id: llm-grok
@@ -173,24 +95,26 @@ dsh-llm-grok: missing credential GROK_SESSION_TOKEN
 
 ```bash
 npm install
+npm test
 npm run build
 ```
 
-## 目录结构
-
 ```text
 dsh-llm-grok/
-├── package.json           # 声明 dsh.bundle，可被 dsh plugin 安装
-├── cordis.patch.yml       # 插入 llm-grok 插件行
-├── tsconfig.json
+├── package.json
+├── cordis.patch.yml
 ├── src/
-│   ├── index.ts           # Cordis 插件入口，注册 grok provider
-│   ├── adapter.ts         # GrokAdapter（LlmAdapter 实现）
-│   ├── serialize.ts       # DSH 消息 → OpenAI chat-completions 请求
-│   ├── translate.ts       # SSE → DSH StreamChunk
-│   └── types.ts           # wire 类型
+│   ├── index.ts       # 注册 grok provider，注入凭据与附件读取
+│   ├── adapter.ts     # LlmAdapter：chat-completions + 模态声明
+│   ├── serialize.ts   # DSH 消息 → 文本 / image_url / 工具
+│   ├── translate.ts   # SSE → DSH StreamChunk
+│   └── types.ts
+└── tests/
+    └── serialize.test.ts
 ```
 
-## TODO / 后续
+## 限制
 
-- [ ] 补测试：SSE 解析、消息序列化、配置校验。
+- 只走 chat-completions，不实现官方 CLI 默认的 Responses API
+- 不做大图请求体驱逐（grok-build 约 50MB 那套策略尚未搬过来）
+- Trajectory 不会出现单独的「识图」tool 行：图在 adapter 组请求时编进 user / tool 消息
