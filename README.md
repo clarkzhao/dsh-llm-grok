@@ -22,22 +22,32 @@
 
 ## 安装到 DSH
 
+外部用户如果还没有全局安装 `dsh`，推荐使用 `npx @deepseek-ai/dsh` 来执行。
+
 ### 从 npm 安装（推荐）
 
 ```bash
+# 方式一：已全局安装 dsh
 dsh plugin --profile web add dsh-llm-grok
+
+# 方式二：未全局安装，使用 npx
+npx @deepseek-ai/dsh plugin --profile web add dsh-llm-grok
 ```
 
 其他 profile：
 
 ```bash
 dsh plugin --profile myprofile add dsh-llm-grok
+# 或
+npx @deepseek-ai/dsh plugin --profile myprofile add dsh-llm-grok
 ```
 
 ### 从 GitHub 安装
 
 ```bash
 dsh plugin --profile web add github:clarkzhao/dsh-llm-grok
+# 或
+npx @deepseek-ai/dsh plugin --profile web add github:clarkzhao/dsh-llm-grok
 ```
 
 ### 从本地源码安装
@@ -45,6 +55,8 @@ dsh plugin --profile web add github:clarkzhao/dsh-llm-grok
 ```bash
 cd /path/to/dsh-llm-grok
 dsh plugin --profile web add .
+# 或
+npx @deepseek-ai/dsh plugin --profile web add .
 ```
 
 安装后 DSH 会自动把 `cordis.patch.yml` 作为 bundle layer 应用，新增
