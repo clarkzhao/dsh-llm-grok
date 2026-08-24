@@ -48,7 +48,11 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "latest",
-    "@deepseek-ai/dsh-llm": "latest",
+    "@deepseek-ai/dsh-attachment": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-brand": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-invariants": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-llm": "0.1.1-rc.2",
+    "@deepseek-ai/dsh-timeout": "^0.1.1-rc.2",
     "@deepseek-ai/schemastery": "latest",
     "@types/node": "^22.0.0",
     "eventsource-parser": "^3.1.0",
