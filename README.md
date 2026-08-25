@@ -35,16 +35,31 @@ npx @deepseek-ai/dsh plugin --profile web add dsh-llm-grok
 
 ## 凭据
 
-插件**不读** `~/.grok/auth.json`。它只解析 DSH 凭据 `GROK_SESSION_TOKEN`。
+插件**不读** `~/.grok/auth.json`，也**不会自动续期**。它只解析 DSH 凭据引用 `GROK_SESSION_TOKEN`。Grok CLI 的 access token 约 6 小时过期；CLI 自己会续 `auth.json`，必须再同步进 DSH，否则下一发请求 401。
 
-1. `grok login`（token 会落到 `~/.grok/auth.json`，方便你复制）
-2. 写入 `~/.dsh/.credentials.yaml`：
+完整步骤（一次性写入、launchd / cron 自动挂载、env 遮挡、LaunchAgents 写不进去、6 小时边界）：**[docs/credential-sync.md](docs/credential-sync.md)**。
 
-   ```yaml
-   GROK_SESSION_TOKEN: <token>
-   ```
+最短路径：
 
-   或启动 DSH 前 `export GROK_SESSION_TOKEN=...`
+```bash
+grok login                                          # token 落到 ~/.grok/auth.json
+python3 scripts/sync-grok-credential.py             # 写入 ~/.dsh/.credentials.yaml
+# macOS 每 5 分钟自动同步（推荐）：
+chmod +x scripts/install-launchd.sh
+./scripts/install-launchd.sh
+```
+
+现行 DSH 凭据文档是 version-1，同步脚本会写成：
+
+```yaml
+version: 1
+refs:
+  GROK_SESSION_TOKEN: <token>
+```
+
+**不要**在已有 `version: 1` 的文件顶层再写扁平的 `GROK_SESSION_TOKEN:`（`unknown top-level key`，`dsh web` 可能起不来）。
+
+也可以启动 DSH **之前**设置环境变量 `GROK_SESSION_TOKEN`（不要把值写进文档或聊天）。进程环境优先级高于文件：若 dsh 启动时环境里已有该变量，文件同步**改不掉**正在使用的值，需 `unset GROK_SESSION_TOKEN` 后重启 DSH。详见文档 §2。验证时只确认 key 是否存在，不要 `cat` / `grep` 凭据文件。
 
 未配置时请求会失败：`dsh-llm-grok: missing credential GROK_SESSION_TOKEN`。
 
@@ -103,6 +118,11 @@ npm run build
 dsh-llm-grok/
 ├── package.json
 ├── cordis.patch.yml
+├── docs/
+│   └── credential-sync.md   # 自动把 grok CLI token 挂进 DSH
+├── scripts/
+│   ├── sync-grok-credential.py
+│   └── install-launchd.sh
 ├── src/
 │   ├── index.ts       # 注册 grok provider，注入凭据与附件读取
 │   ├── adapter.ts     # LlmAdapter：chat-completions + 模态声明
@@ -110,7 +130,8 @@ dsh-llm-grok/
 │   ├── translate.ts   # SSE → DSH StreamChunk
 │   └── types.ts
 └── tests/
-    └── serialize.test.ts
+    ├── serialize.test.ts
+    └── sync-grok-credential.test.py
 ```
 
 ## 限制
@@ -118,3 +139,4 @@ dsh-llm-grok/
 - 只走 chat-completions，不实现官方 CLI 默认的 Responses API
 - 不做大图请求体驱逐（grok-build 约 50MB 那套策略尚未搬过来）
 - Trajectory 不会出现单独的「识图」tool 行：图在 adapter 组请求时编进 user / tool 消息
+- 不读 `~/.grok/auth.json`，不做 `refresh_token` 惰性刷新（方案 B 未实施）。自动挂载是仓库外的 launchd / cron 同步，见 [docs/credential-sync.md](docs/credential-sync.md)
