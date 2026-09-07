@@ -1,33 +1,45 @@
 /**
  * dsh-llm-grok plugin entry.
  *
- * Registers a `grok` provider route on DSH's LLM seam. By default it talks
- * directly to Grok's subscription chat proxy through the configured HTTP(S)
- * proxy (e.g. `http://127.0.0.1:7890`). A local proxy base URL can still be
- * configured for compatibility.
+ * Registers a `grok` provider route on DSH's LLM seam. Connection facts are
+ * resolved per request: the plugin layers its `cordis.yml` entry under the
+ * optional `llm-grok` user-settings section and resolves the session token
+ * through the credential seam, so a changed base URL, catalog, proxy, or key
+ * reaches the next request without restarting. An in-flight stream keeps the
+ * facts it started with. The one registration-captured fact — the retry
+ * policy — re-registers the route in place when it changes.
  */
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import {
+  LlmError,
+  RetryPolicySchema,
+  assertUsableApiKey,
+} from '@deepseek-ai/dsh-llm'
+import { credentialRef } from '@deepseek-ai/dsh-credentials'
+import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
+import '@deepseek-ai/dsh-settings'
 import { GrokAdapter } from './adapter.js'
-import type { GrokCatalogModel } from './adapter.js'
+import type { GrokConnectionOptions } from './catalog.ts'
+import {
+  DEFAULT_API_KEY_ENV,
+  DEFAULT_BASE_URL,
+  DEFAULT_CONTEXT_WINDOW,
+  DEFAULT_MAX_TOKENS,
+  DEFAULT_MODELS,
+  DEFAULT_PROXY,
+  resolveAdapterOptions,
+  type Config as GrokPluginConfig,
+} from './options.js'
+
+export { resolveAdapterOptions }
 
 export const name = 'llm-grok'
 export const inject = ['llm']
 
 const PROVIDER = 'grok'
-const DEFAULT_BASE_URL = 'https://cli-chat-proxy.grok.com/v1'
-const DEFAULT_PROXY = 'http://127.0.0.1:7890'
-const DEFAULT_API_KEY_ENV = 'GROK_SESSION_TOKEN'
-
-export interface Config {
-  baseURL?: string
-  apiKeyEnv?: string
-  proxy?: string
-  defaultContextWindow?: number
-  defaultMaxTokens?: number
-  models?: GrokCatalogModel[]
-}
+const NS = 'llm-grok'
 
 const reasoningEfforts = z.dict(z.string())
 
@@ -39,54 +51,94 @@ const catalogModel = z.object({
   reasoningEfforts,
 })
 
-export const Config: z<Config> = z.object({
+export const Config: z<GrokPluginConfig> = z.object({
   baseURL: z.string().default(DEFAULT_BASE_URL),
   apiKeyEnv: z.string().role('credential-ref').default(DEFAULT_API_KEY_ENV),
   proxy: z.string().default(DEFAULT_PROXY),
-  defaultContextWindow: z.number().step(1).min(1).default(500000),
-  defaultMaxTokens: z.number().step(1).min(1).default(128000),
-  models: z.array(catalogModel).default([
-    {
-      id: 'grok-4.6',
-      name: 'Grok 4.6',
-      contextWindow: 500000,
-      maxTokens: 128000,
-      reasoningEfforts: { low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh' },
-    },
-    {
-      id: 'grok-4.5',
-      name: 'Grok 4.5',
-      contextWindow: 500000,
-      maxTokens: 128000,
-      reasoningEfforts: { low: 'low', medium: 'medium', high: 'high' },
-    },
-  ]),
+  defaultContextWindow: z.number().step(1).min(1).default(DEFAULT_CONTEXT_WINDOW),
+  defaultMaxTokens: z.number().step(1).min(1).default(DEFAULT_MAX_TOKENS),
+  models: z.array(catalogModel).default(DEFAULT_MODELS as never),
+  retryPolicy: RetryPolicySchema,
 })
 
-export function apply(ctx: Context, config: Config): void {
-  const apiKeyEnv = config.apiKeyEnv ?? DEFAULT_API_KEY_ENV
+function retryPolicyEquals(
+  left: GrokConnectionOptions['retryPolicy'],
+  right: GrokConnectionOptions['retryPolicy'],
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right)
+}
+
+export function apply(ctx: Context, config: GrokPluginConfig): void {
+  let current = (): GrokPluginConfig => config
+  let lastRaw: GrokPluginConfig | undefined
+  let lastGood: ReturnType<typeof resolveAdapterOptions> | undefined
+
+  const options = (): ReturnType<typeof resolveAdapterOptions> => {
+    const raw = current()
+    if (raw === lastRaw && lastGood !== undefined) return lastGood
+    try {
+      const next = resolveAdapterOptions(raw)
+      lastRaw = raw
+      lastGood = next
+      return next
+    } catch (error) {
+      if (lastGood === undefined) throw error
+      lastRaw = raw
+      ctx.logger.error('dsh-llm-grok: keeping the last good configuration after an invalid settings section')
+      ctx.logger.error(error)
+      return lastGood
+    }
+  }
+
+  options()
 
   const resolveApiKey = async (): Promise<string> => {
+    const ref = credentialRef(options().apiKeyEnv)
     const credentials = ctx.get('credentials')
     if (credentials !== undefined) {
-      const hit = await credentials.resolve(apiKeyEnv as never)
-      if (hit !== undefined && hit.value.length > 0) return hit.value
+      const hit = await credentials.resolve(ref)
+      if (hit !== undefined) return assertUsableApiKey(hit.value, 'dsh-llm-grok', ref)
+    } else {
+      const ambient = launchEnvironmentOf(ctx).get(ref)
+      if (ambient !== undefined && ambient.value.length > 0) {
+        return assertUsableApiKey(ambient.value, 'dsh-llm-grok', ref)
+      }
     }
-    const ambient = process.env[apiKeyEnv]
-    if (ambient !== undefined && ambient.length > 0) return ambient
-    throw new Error(`dsh-llm-grok: missing credential ${apiKeyEnv}`)
+    throw new LlmError(
+      `dsh-llm-grok: no API key for provider route "${PROVIDER}"; store ${ref} through the credentials service, or export ${ref} in the launching environment`,
+      'MISSING_CREDENTIAL',
+    )
   }
 
   const adapter = new GrokAdapter({
-    baseURL: config.baseURL ?? DEFAULT_BASE_URL,
-    apiKeyEnv,
-    proxy: config.proxy ?? DEFAULT_PROXY,
-    defaultContextWindow: config.defaultContextWindow,
-    defaultMaxTokens: config.defaultMaxTokens,
-    models: config.models,
+    options,
     resolveApiKey,
     resolveAttachments: () => ctx.get('attachments'),
   })
+  ctx.effect(() => () => adapter.dispose())
 
-  ctx.llm.registerAdapter([PROVIDER], adapter)
+  ctx.llm.registerConfigurableProviders([{
+    provider: PROVIDER,
+    displayName: 'Grok (Subscription)',
+    settingsNs: NS,
+    settingsPath: [],
+  }])
+
+  const registration = ctx.llm.registerAdapter([PROVIDER], adapter)
+  let registeredPolicy = options().retryPolicy
+  const ensureRegistrationFacts = (): void => {
+    const policy = options().retryPolicy
+    if (retryPolicyEquals(policy, registeredPolicy)) return
+    registration.replace([PROVIDER])
+    registeredPolicy = policy
+  }
+
+  ctx.inject(['settings'], (settingsCtx) => {
+    settingsCtx.settings.installSection(ctx, NS, Config, config, {
+      setSource: (source: () => GrokPluginConfig) => {
+        current = source
+      },
+      onChange: ensureRegistrationFacts,
+    })
+  })
 }

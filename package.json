@@ -1,6 +1,6 @@
 {
   "name": "dsh-llm-grok",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Independent DeepSeek Harness plugin that adds Grok subscription as an LLM provider",
   "type": "module",
   "main": "lib/index.js",
@@ -13,6 +13,7 @@
     "./package.json": "./package.json"
   },
   "files": [
+    "LICENSE",
     "lib",
     "cordis.patch.yml",
     "README.md",
@@ -25,6 +26,10 @@
     "prepublishOnly": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --experimental-strip-types --test tests/*.test.ts && python3 tests/sync-grok-credential.test.py"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/clarkzhao/dsh-llm-grok.git"
   },
   "publishConfig": {
     "access": "public"
@@ -44,18 +49,25 @@
     }
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "*",
-    "@deepseek-ai/dsh-llm": "*",
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-attachment": "^0.1.2-rc.1",
+    "@deepseek-ai/dsh-credentials": "^0.1.2-rc.1",
+    "@deepseek-ai/dsh-launch-environment": "^0.1.2-rc.1",
+    "@deepseek-ai/dsh-llm": "^0.1.2-rc.1",
+    "@deepseek-ai/dsh-settings": "^0.1.2-rc.1",
     "@deepseek-ai/schemastery": "*"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "latest",
-    "@deepseek-ai/dsh-attachment": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-brand": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-invariants": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-llm": "0.1.1-rc.2",
-    "@deepseek-ai/dsh-timeout": "^0.1.1-rc.2",
-    "@deepseek-ai/schemastery": "latest",
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-attachment": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-brand": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-credentials": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-invariants": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-launch-environment": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-llm": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-settings": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-timeout": "0.1.2-rc.1",
+    "@deepseek-ai/schemastery": "^3.18.2",
     "@types/node": "^22.0.0",
     "eventsource-parser": "^3.1.0",
     "typescript": "^5.6.0"

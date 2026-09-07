@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { CallId, LlmError, createAssistantMessage, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
+import { LlmError, ToolCallId, createAssistantMessage, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
 import { serializeRequest, type AttachmentReader } from '../src/serialize.ts'
 import type { WireContentPart, WireMessage } from '../src/types.ts'
@@ -18,7 +18,7 @@ function imageRef(id: string) {
   }
 }
 
-function reader(bytesById: Record<string, Uint8Array> = { shot: PNG }): AttachmentReader {
+function reader(bytesById: Record<string, Uint8Array> = { shot: PNG }): AttachmentReader & { reads: string[] } {
   const reads: string[] = []
   return {
     reads,
@@ -112,14 +112,14 @@ test('tool-result images stay on the tool message as image_url parts', async () 
     createAssistantMessage({
       content: [{
         type: 'tool-call',
-        id: CallId('call-1'),
+        id: ToolCallId('call-1'),
         name: 'read_file',
         arguments: '{}',
       }],
       source: { provider: 'grok', model: 'grok-4.6' },
     }),
     createToolResultMessage({
-      callId: CallId('call-1'),
+      callId: ToolCallId('call-1'),
       isError: false,
       content: [
         { type: 'text', text: 'screenshot' },

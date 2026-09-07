@@ -8,16 +8,10 @@
 
 import { contentHasImage, LlmError } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, GenerateOptions, Message } from '@deepseek-ai/dsh-llm'
+import type { AttachmentStore, ImageAttachmentRef, StoredImageAttachment } from '@deepseek-ai/dsh-attachment'
 import type { WireContentPart, WireMessage, WireRequest, WireTool } from './types.ts'
 
-export interface StoredImage {
-  ref: { mediaType: string }
-  data: Uint8Array
-}
-
-export interface AttachmentReader {
-  readImage(ref: { attachmentId: unknown; mediaType: string }): Promise<StoredImage>
-}
+export type AttachmentReader = Pick<AttachmentStore, 'readImage'>
 
 function flattenText(blocks: readonly ContentBlock[]): string {
   return blocks
@@ -38,10 +32,10 @@ function dataUrl(mediaType: string, data: Uint8Array): string {
 }
 
 async function loadImage(
-  ref: { attachmentId: unknown; mediaType: string },
+  ref: ImageAttachmentRef,
   attachments: AttachmentReader | undefined,
-  cache: Map<string, StoredImage>,
-): Promise<StoredImage> {
+  cache: Map<string, StoredImageAttachment>,
+): Promise<StoredImageAttachment> {
   if (attachments === undefined) {
     throw new LlmError(
       'The Grok chat-completions adapter requires the durable attachment service to send image content.',
@@ -59,7 +53,7 @@ async function loadImage(
 async function serializeParts(
   blocks: readonly ContentBlock[],
   attachments: AttachmentReader | undefined,
-  cache: Map<string, StoredImage>,
+  cache: Map<string, StoredImageAttachment>,
 ): Promise<WireContentPart[]> {
   const parts: WireContentPart[] = []
   for (const block of blocks) {
@@ -104,7 +98,7 @@ async function serializeMessages(
   messages: Message[],
   attachments: AttachmentReader | undefined,
 ): Promise<WireMessage[]> {
-  const cache = new Map<string, StoredImage>()
+  const cache = new Map<string, StoredImageAttachment>()
   const wire: WireMessage[] = []
   for (const message of messages) {
     if (message.role === 'system') {
