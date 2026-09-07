@@ -128,7 +128,6 @@ dsh-llm-grok/
 ├── src/
 │   ├── index.ts       # 注册 grok provider，settings 热加载，凭据与附件读取
 │   ├── options.ts     # 校验连接事实（baseURL / catalog / retry）
-│   ├── catalog.ts     # 模型目录与连接事实类型
 │   ├── http.ts        # 订阅请求头 + HTTP 错误码
 │   ├── adapter.ts     # LlmAdapter：prepareCall + chat-completions + 模态声明
 │   ├── serialize.ts   # DSH 消息 → 文本 / image_url / 工具

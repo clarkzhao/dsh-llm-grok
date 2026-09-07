@@ -35,3 +35,15 @@ test('resolveAdapterOptions fills defaults and detaches the catalog', () => {
   assert.equal(resolved.retryPolicy.mode, 'normal')
   assert.equal(resolveAdapterOptions({ proxy: '' }).proxy, undefined)
 })
+
+test('resolveAdapterOptions rejects a duplicate catalog id', () => {
+  assert.throws(
+    () => resolveAdapterOptions({
+      models: [
+        { id: 'grok-4.6', name: 'A' },
+        { id: 'grok-4.6', name: 'B' },
+      ],
+    }),
+    /duplicate catalog model/,
+  )
+})

@@ -21,7 +21,6 @@ import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import '@deepseek-ai/dsh-settings'
 import { GrokAdapter } from './adapter.js'
-import type { GrokConnectionOptions } from './catalog.ts'
 import {
   DEFAULT_API_KEY_ENV,
   DEFAULT_BASE_URL,
@@ -31,9 +30,8 @@ import {
   DEFAULT_PROXY,
   resolveAdapterOptions,
   type Config as GrokPluginConfig,
+  type GrokConnectionOptions,
 } from './options.js'
-
-export { resolveAdapterOptions }
 
 export const name = 'llm-grok'
 export const inject = ['llm']
@@ -92,8 +90,8 @@ export function apply(ctx: Context, config: GrokPluginConfig): void {
 
   options()
 
-  const resolveApiKey = async (): Promise<string> => {
-    const ref = credentialRef(options().apiKeyEnv)
+  const resolveApiKey = async (connection: GrokConnectionOptions): Promise<string> => {
+    const ref = credentialRef(connection.apiKeyEnv)
     const credentials = ctx.get('credentials')
     if (credentials !== undefined) {
       const hit = await credentials.resolve(ref)

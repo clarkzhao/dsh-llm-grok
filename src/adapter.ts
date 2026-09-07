@@ -29,15 +29,13 @@ import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import { serializeRequest } from './serialize.js'
 import { translate } from './translate.js'
 import { grokHeaders, httpErrorCode, sanitizeErrorBody } from './http.js'
-import type { GrokCatalogModel, GrokConnectionOptions } from './catalog.ts'
-
-export type { GrokCatalogModel, GrokConnectionOptions }
+import type { GrokConnectionOptions } from './options.ts'
 
 export interface GrokAdapterOptions {
   /** Current validated connection facts; called once per operation. */
   options: () => GrokConnectionOptions
-  /** Resolve the bearer token for one request. Throws `MISSING_CREDENTIAL`. */
-  resolveApiKey: () => Promise<string>
+  /** Resolve the bearer for the connection snapshot of this request. */
+  resolveApiKey: (connection: GrokConnectionOptions) => Promise<string>
   resolveAttachments?: () => AttachmentStore | undefined
 }
 
@@ -168,7 +166,7 @@ export class GrokAdapter extends LlmAdapter {
     options: GenerateOptions,
     connection: GrokConnectionOptions,
   ): AsyncGenerator<StreamChunk> {
-    const apiKey = await this.config.resolveApiKey()
+    const apiKey = await this.config.resolveApiKey(connection)
     const model = connection.models.find(item => item.id === options.model)
     const effort = options.reasoningEffort === undefined
       ? undefined

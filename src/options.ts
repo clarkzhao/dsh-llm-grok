@@ -1,17 +1,36 @@
 /**
- * Validate plugin config into per-request connection facts. Kept out of
- * `index.ts` so unit tests can import it without loading the Cordis plugin
- * entry (Node's strip-only loader cannot follow `.js` specifiers into `src/`).
+ * Plugin config and the per-request connection facts derived from it.
+ * Isolated from `index.ts` so unit tests can import it without loading the
+ * Cordis plugin entry (Node's strip-only loader cannot follow `.js`
+ * specifiers into `src/`).
  */
 
-import { resolveRetryPolicy, type RetryPolicyConfig } from '@deepseek-ai/dsh-llm'
-import type { GrokCatalogModel, GrokConnectionOptions } from './catalog.ts'
+import { resolveRetryPolicy, type RetryPolicyConfig, type ResolvedRetryPolicy } from '@deepseek-ai/dsh-llm'
 
 export const DEFAULT_BASE_URL = 'https://cli-chat-proxy.grok.com/v1'
 export const DEFAULT_PROXY = 'http://127.0.0.1:7890'
 export const DEFAULT_API_KEY_ENV = 'GROK_SESSION_TOKEN'
 export const DEFAULT_CONTEXT_WINDOW = 500000
 export const DEFAULT_MAX_TOKENS = 128000
+
+export interface GrokCatalogModel {
+  id: string
+  name?: string
+  contextWindow?: number
+  maxTokens?: number
+  reasoningEfforts?: Record<string, string>
+}
+
+/** Validated connection facts for one operation, including the credential ref. */
+export interface GrokConnectionOptions {
+  apiKeyEnv: string
+  baseURL: string
+  proxy?: string
+  defaultContextWindow: number
+  defaultMaxTokens: number
+  models: readonly GrokCatalogModel[]
+  retryPolicy: ResolvedRetryPolicy
+}
 
 export interface Config {
   baseURL?: string
@@ -47,16 +66,6 @@ function resolveModels(
 ): GrokCatalogModel[] {
   const seen = new Set<string>()
   return (models ?? DEFAULT_MODELS).map(model => {
-    if (model.id.length === 0) throw new Error('dsh-llm-grok: catalog model ids must be non-empty')
-    if (model.name !== undefined && model.name.length === 0) {
-      throw new Error(`dsh-llm-grok: catalog model "${model.id}" has an empty name`)
-    }
-    if (model.contextWindow !== undefined && (!Number.isInteger(model.contextWindow) || model.contextWindow <= 0)) {
-      throw new Error(`dsh-llm-grok: catalog model "${model.id}" contextWindow must be a positive integer`)
-    }
-    if (model.maxTokens !== undefined && (!Number.isInteger(model.maxTokens) || model.maxTokens <= 0)) {
-      throw new Error(`dsh-llm-grok: catalog model "${model.id}" maxTokens must be a positive integer`)
-    }
     if (seen.has(model.id)) throw new Error(`dsh-llm-grok: duplicate catalog model "${model.id}"`)
     seen.add(model.id)
     return {
@@ -69,13 +78,7 @@ function resolveModels(
   })
 }
 
-export function resolveAdapterOptions(config: Config): GrokConnectionOptions & { apiKeyEnv: string } {
-  if (config.defaultContextWindow !== undefined && (!Number.isInteger(config.defaultContextWindow) || config.defaultContextWindow <= 0)) {
-    throw new Error('dsh-llm-grok: defaultContextWindow must be a positive integer')
-  }
-  if (config.defaultMaxTokens !== undefined && (!Number.isSafeInteger(config.defaultMaxTokens) || config.defaultMaxTokens <= 0)) {
-    throw new Error('dsh-llm-grok: defaultMaxTokens must be a positive safe integer')
-  }
+export function resolveAdapterOptions(config: Config): GrokConnectionOptions {
   const defaultContextWindow = config.defaultContextWindow ?? DEFAULT_CONTEXT_WINDOW
   const defaultMaxTokens = config.defaultMaxTokens ?? DEFAULT_MAX_TOKENS
   const proxy = config.proxy ?? DEFAULT_PROXY
