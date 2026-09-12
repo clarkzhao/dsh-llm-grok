@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { LlmError, ToolCallId, createAssistantMessage, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
+import { LlmError, ToolCallId, createAssistantMessage, createSystemMessage, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
 import { serializeRequest, type AttachmentReader } from '../src/serialize.ts'
 import type { WireContentPart, WireMessage } from '../src/types.ts'
@@ -55,6 +55,49 @@ test('text-only user messages stay a string and never touch attachments', async 
     { role: 'user', content: 'hello' },
   ])
   assert.equal(attachments.reads.length, 0)
+})
+
+// DSH 0.1.5 moved the system prompt for loop-built requests: `options.system`
+// is left undefined and the rendered prompt travels as the leading system-role
+// message of `messages` instead. Only hand-built one-shot callers still set
+// `options.system`. Both must reach the wire identically, or a normal agent
+// turn silently loses its system prompt.
+test('a loop-built request carries the system prompt as a leading system message', async () => {
+  const body = await serializeRequest(options([
+    createSystemMessage('SYS-PROMPT', 'test-plugin'),
+    createUserMessage({ content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' } }),
+  ]), undefined, undefined)
+
+  assert.deepEqual(body.messages, [
+    { role: 'system', content: 'SYS-PROMPT' },
+    { role: 'user', content: 'hi' },
+  ])
+})
+
+test('a one-shot request maps options.system ahead of the messages', async () => {
+  const body = await serializeRequest({
+    ...options([
+      createUserMessage({ content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' } }),
+    ]),
+    system: 'SYS-PROMPT',
+  }, undefined, undefined)
+
+  assert.deepEqual(body.messages, [
+    { role: 'system', content: 'SYS-PROMPT' },
+    { role: 'user', content: 'hi' },
+  ])
+})
+
+test('either system path emits exactly one system message, first', async () => {
+  const user = createUserMessage({ content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' } })
+  const loopBuilt = await serializeRequest(options([createSystemMessage('SYS-PROMPT', 'test-plugin'), user]), undefined, undefined)
+  const oneShot = await serializeRequest({ ...options([user]), system: 'SYS-PROMPT' }, undefined, undefined)
+
+  assert.deepEqual(loopBuilt.messages, oneShot.messages)
+  for (const body of [loopBuilt, oneShot]) {
+    assert.equal(body.messages.filter(message => message.role === 'system').length, 1)
+    assert.equal(body.messages[0]?.role, 'system')
+  }
 })
 
 test('user text plus image becomes image_url data URL parts in order', async () => {

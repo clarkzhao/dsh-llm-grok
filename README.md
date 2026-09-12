@@ -16,7 +16,7 @@ Grok 4.6 / 4.5 在本插件里是原生多模态：用户贴图和 tool-result �
 | 上下文 / 输出 | 500K / 128K | 同左 |
 | 输入模态 | text + image | text + image |
 
-- 针对 **DSH 0.1.2-rc.1**（`@deepseek-ai/dsh-llm` 的 `prepareCall` / `attributionHeaders` / `llm-grok` settings namespace）
+- 针对 **DSH 0.1.5-rc.2**（`@deepseek-ai/dsh-llm` 的 `prepareCall` / `attributionHeaders` / `llm-grok` settings namespace）
 - 默认 `baseURL`：`https://cli-chat-proxy.grok.com/v1`
 - 走本机 HTTP 代理（默认 Clash `http://127.0.0.1:7890`），不依赖 Python 旁路
 - 会话日志只存附件引用（`sha256:`）。像素只在发请求时从 `ctx.attachments` 读出，编成 `image_url` data URL
