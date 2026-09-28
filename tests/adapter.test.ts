@@ -31,9 +31,23 @@ test('resolveAdapterOptions fills defaults and detaches the catalog', () => {
   assert.equal(resolved.baseURL, 'https://cli-chat-proxy.grok.com/v1')
   assert.equal(resolved.proxy, 'http://127.0.0.1:7890')
   assert.equal(resolved.apiKeyEnv, 'GROK_SESSION_TOKEN')
-  assert.equal(resolved.models[0]?.id, 'grok-4.6')
+  assert.equal(resolved.models[0]?.id, 'grok-4.7')
   assert.equal(resolved.retryPolicy.mode, 'normal')
   assert.equal(resolveAdapterOptions({ proxy: '' }).proxy, undefined)
+})
+
+test('the default catalog advertises the subscription endpoint models, newest first', () => {
+  // Mirrors `GET /v1/models` on the subscription endpoint, which is the
+  // authority for which ids and reasoning levels the route accepts.
+  assert.deepEqual(
+    resolveAdapterOptions({}).models.map(model => [model.id, model.name, Object.keys(model.reasoningEfforts ?? {})]),
+    [
+      ['grok-4.7', 'Grok 4.7', ['low', 'medium', 'high', 'xhigh']],
+      ['grok-4.7-build-fast', 'Grok 4.7 Fast', ['low', 'medium', 'high', 'xhigh']],
+      ['grok-4.6', 'Grok 4.6', ['low', 'medium', 'high', 'xhigh']],
+      ['grok-4.5', 'Grok 4.5', ['low', 'medium', 'high']],
+    ],
+  )
 })
 
 test('resolveAdapterOptions rejects a duplicate catalog id', () => {
@@ -46,4 +60,23 @@ test('resolveAdapterOptions rejects a duplicate catalog id', () => {
     }),
     /duplicate catalog model/,
   )
+})
+
+test('resolveAdapterOptions drops a catalog entry with no reasoning efforts', () => {
+  // `{}` is what the Config schema's dict default yields for a catalog entry
+  // that names none; forwarding it would advertise zero reasoning levels.
+  const resolved = resolveAdapterOptions({ models: [{ id: 'plain' }, { id: 'empty', reasoningEfforts: {} }] })
+  assert.deepEqual(resolved.models[0], {
+    id: 'plain',
+    name: 'plain',
+    contextWindow: 500000,
+    maxTokens: 128000,
+  })
+  assert.ok(!('reasoningEfforts' in resolved.models[0]!))
+  assert.ok(!('reasoningEfforts' in resolved.models[1]!))
+})
+
+test('resolveAdapterOptions keeps the reasoning efforts a catalog entry declares', () => {
+  const resolved = resolveAdapterOptions({ models: [{ id: 'reasoning', reasoningEfforts: { low: 'low' } }] })
+  assert.deepEqual(resolved.models[0]?.reasoningEfforts, { low: 'low' })
 })

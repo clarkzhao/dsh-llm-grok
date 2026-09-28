@@ -44,6 +44,20 @@ export interface Config {
 
 export const DEFAULT_MODELS: GrokCatalogModel[] = [
   {
+    id: 'grok-4.7',
+    name: 'Grok 4.7',
+    contextWindow: DEFAULT_CONTEXT_WINDOW,
+    maxTokens: DEFAULT_MAX_TOKENS,
+    reasoningEfforts: { low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh' },
+  },
+  {
+    id: 'grok-4.7-build-fast',
+    name: 'Grok 4.7 Fast',
+    contextWindow: DEFAULT_CONTEXT_WINDOW,
+    maxTokens: DEFAULT_MAX_TOKENS,
+    reasoningEfforts: { low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh' },
+  },
+  {
     id: 'grok-4.6',
     name: 'Grok 4.6',
     contextWindow: DEFAULT_CONTEXT_WINDOW,
@@ -68,12 +82,21 @@ function resolveModels(
   return (models ?? DEFAULT_MODELS).map(model => {
     if (seen.has(model.id)) throw new Error(`dsh-llm-grok: duplicate catalog model "${model.id}"`)
     seen.add(model.id)
+    const efforts = model.reasoningEfforts
     return {
       id: model.id,
       name: model.name ?? model.id,
       contextWindow: model.contextWindow ?? defaultContextWindow,
       maxTokens: model.maxTokens ?? defaultMaxTokens,
-      ...model.reasoningEfforts === undefined ? {} : { reasoningEfforts: { ...model.reasoningEfforts } },
+      // An absent map and an empty one mean the same thing here: the model
+      // exposes no reasoning levels. The Config schema's dict default hands an
+      // empty map to every catalog entry that declares none, so it has to be
+      // dropped rather than carried forward — downstream `modelInfoFor` would
+      // otherwise advertise zero efforts, which DSH rejects with
+      // INVALID_MODEL_REASONING.
+      ...efforts === undefined || Object.keys(efforts).length === 0
+        ? {}
+        : { reasoningEfforts: { ...efforts } },
     }
   })
 }

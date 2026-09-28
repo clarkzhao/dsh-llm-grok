@@ -16,10 +16,10 @@ import {
   LlmError,
   RetryPolicySchema,
   assertUsableApiKey,
+  type AdapterRegistrationHandle,
 } from '@deepseek-ai/dsh-llm'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
-import '@deepseek-ai/dsh-settings'
 import { GrokAdapter } from './adapter.js'
 import {
   DEFAULT_API_KEY_ENV,
@@ -67,7 +67,7 @@ function retryPolicyEquals(
 }
 
 export function apply(ctx: Context, config: GrokPluginConfig): void {
-  let current = (): GrokPluginConfig => config
+  const current = (): GrokPluginConfig => config
   let lastRaw: GrokPluginConfig | undefined
   let lastGood: ReturnType<typeof resolveAdapterOptions> | undefined
 
@@ -109,7 +109,14 @@ export function apply(ctx: Context, config: GrokPluginConfig): void {
   }
 
   const adapter = new GrokAdapter({
-    options,
+    // Re-check the one registration-captured fact on every operation. DSH
+    // 0.1.7 derives the `llm-grok` settings page from the exported `Config`
+    // schema, so there is no section callback left to observe a retry-policy
+    // edit; the per-operation check keeps the old live behaviour.
+    options: () => {
+      ensureRegistrationFacts()
+      return options()
+    },
     resolveApiKey,
     resolveAttachments: () => ctx.get('attachments'),
   })
@@ -122,21 +129,24 @@ export function apply(ctx: Context, config: GrokPluginConfig): void {
     settingsPath: [],
   }])
 
-  const registration = ctx.llm.registerAdapter([PROVIDER], adapter)
+  // `registerAdapter` reads the retry policy through `providerRetryPolicy` while
+  // it is still registering the route, so the captured policy has to exist
+  // before that call; reading it from inside the registration is a
+  // temporal-dead-zone error. The handle stays unset until registration
+  // returns, which keeps `ensureRegistrationFacts` inert during that window.
   let registeredPolicy = options().retryPolicy
-  const ensureRegistrationFacts = (): void => {
+  let registration: AdapterRegistrationHandle | undefined
+
+  function ensureRegistrationFacts(): void {
+    if (registration === undefined) return
     const policy = options().retryPolicy
     if (retryPolicyEquals(policy, registeredPolicy)) return
-    registration.replace([PROVIDER])
+    // Record the new policy *before* swapping the route: `replace` re-reads it
+    // through `providerRetryPolicy`, so a re-entrant call must already observe
+    // the new value instead of triggering another replacement forever.
     registeredPolicy = policy
+    registration.replace([PROVIDER])
   }
 
-  ctx.inject(['settings'], (settingsCtx) => {
-    settingsCtx.settings.installSection(ctx, NS, Config, config, {
-      setSource: (source: () => GrokPluginConfig) => {
-        current = source
-      },
-      onChange: ensureRegistrationFacts,
-    })
-  })
+  registration = ctx.llm.registerAdapter([PROVIDER], adapter)
 }
