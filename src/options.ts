@@ -44,6 +44,20 @@ export interface Config {
 
 export const DEFAULT_MODELS: GrokCatalogModel[] = [
   {
+    id: 'grok-4.7',
+    name: 'Grok 4.7',
+    contextWindow: DEFAULT_CONTEXT_WINDOW,
+    maxTokens: DEFAULT_MAX_TOKENS,
+    reasoningEfforts: { low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh' },
+  },
+  {
+    id: 'grok-4.7-build-fast',
+    name: 'Grok 4.7 Fast',
+    contextWindow: DEFAULT_CONTEXT_WINDOW,
+    maxTokens: DEFAULT_MAX_TOKENS,
+    reasoningEfforts: { low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh' },
+  },
+  {
     id: 'grok-4.6',
     name: 'Grok 4.6',
     contextWindow: DEFAULT_CONTEXT_WINDOW,

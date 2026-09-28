@@ -89,6 +89,24 @@ x-grok-model-override: grok-4.6 | grok-4.5
     apiKeyEnv: GROK_SESSION_TOKEN
     proxy: http://127.0.0.1:7890
     models:
+      - id: grok-4.7
+        name: Grok 4.7
+        contextWindow: 500000
+        maxTokens: 128000
+        reasoningEfforts:
+          low: low
+          medium: medium
+          high: high
+          xhigh: xhigh
+      - id: grok-4.7-build-fast
+        name: Grok 4.7 Fast
+        contextWindow: 500000
+        maxTokens: 128000
+        reasoningEfforts:
+          low: low
+          medium: medium
+          high: high
+          xhigh: xhigh
       - id: grok-4.6
         name: Grok 4.6
         contextWindow: 500000
