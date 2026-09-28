@@ -7,7 +7,7 @@
  */
 
 import { contentHasImage, LlmError } from '@deepseek-ai/dsh-llm'
-import type { ContentBlock, GenerateOptions, Message } from '@deepseek-ai/dsh-llm'
+import type { AssistantMessage, ContentBlock, GenerateOptions, RequestMessage } from '@deepseek-ai/dsh-llm'
 import type { AttachmentStore, ImageAttachmentRef, StoredImageAttachment } from '@deepseek-ai/dsh-attachment'
 import type { WireContentPart, WireMessage, WireRequest, WireTool } from './types.ts'
 
@@ -72,7 +72,7 @@ async function serializeParts(
   return parts
 }
 
-function serializeAssistant(message: Message): WireMessage {
+function serializeAssistant(message: AssistantMessage): WireMessage {
   if (contentHasImage(message.content)) rejectImages('assistant')
   const text = flattenText(message.content)
   const reasoning = message.content
@@ -95,44 +95,53 @@ function serializeAssistant(message: Message): WireMessage {
 }
 
 async function serializeMessages(
-  messages: Message[],
+  messages: readonly RequestMessage[],
   attachments: AttachmentReader | undefined,
 ): Promise<WireMessage[]> {
   const cache = new Map<string, StoredImageAttachment>()
   const wire: WireMessage[] = []
   for (const message of messages) {
-    if (message.role === 'system') {
-      if (contentHasImage(message.content)) rejectImages('system')
-      wire.push({ role: 'system', content: flattenText(message.content) })
-      continue
-    }
-    if (message.role === 'assistant') {
-      wire.push(serializeAssistant(message))
-      continue
-    }
-    const toolResults = message.content.filter(block => block.type === 'tool-result')
-    const userBlocks = message.content.filter(block => block.type !== 'tool-result')
-    if (userBlocks.length > 0 || toolResults.length === 0) {
-      if (contentHasImage(userBlocks)) {
-        wire.push({ role: 'user', content: await serializeParts(userBlocks, attachments, cache) })
-      } else {
-        wire.push({ role: 'user', content: flattenText(userBlocks) })
-      }
-    }
-    for (const result of toolResults) {
-      if (contentHasImage(result.content)) {
-        wire.push({
-          role: 'tool',
-          tool_call_id: result.toolCallId,
-          content: await serializeParts(result.content, attachments, cache),
-        })
-      } else {
-        wire.push({
-          role: 'tool',
-          tool_call_id: result.toolCallId,
-          content: flattenText(result.content) || '(no output)',
-        })
-      }
+    // DSH 0.1.7 models a tool result as its own `tool`-role message rather than
+    // a `tool-result` content block, so dispatch on the role directly.
+    switch (message.role) {
+      case 'system':
+        if (contentHasImage(message.content)) rejectImages('system')
+        wire.push({ role: 'system', content: flattenText(message.content) })
+        continue
+
+      // Tool additions/removals are folded into the request's tool list by
+      // `projectToolUpdates` before dispatch; a chat-completions wire has no
+      // history slot for them.
+      case 'developer':
+        continue
+
+      case 'assistant':
+        wire.push(serializeAssistant(message))
+        continue
+
+      case 'tool':
+        if (contentHasImage(message.content)) {
+          wire.push({
+            role: 'tool',
+            tool_call_id: message.toolCallId,
+            content: await serializeParts(message.content, attachments, cache),
+          })
+        } else {
+          wire.push({
+            role: 'tool',
+            tool_call_id: message.toolCallId,
+            content: flattenText(message.content) || '(no output)',
+          })
+        }
+        continue
+
+      case 'user':
+        if (contentHasImage(message.content)) {
+          wire.push({ role: 'user', content: await serializeParts(message.content, attachments, cache) })
+        } else {
+          wire.push({ role: 'user', content: flattenText(message.content) })
+        }
+        continue
     }
   }
   return wire

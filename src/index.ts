@@ -19,7 +19,6 @@ import {
 } from '@deepseek-ai/dsh-llm'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
-import '@deepseek-ai/dsh-settings'
 import { GrokAdapter } from './adapter.js'
 import {
   DEFAULT_API_KEY_ENV,
@@ -67,7 +66,7 @@ function retryPolicyEquals(
 }
 
 export function apply(ctx: Context, config: GrokPluginConfig): void {
-  let current = (): GrokPluginConfig => config
+  const current = (): GrokPluginConfig => config
   let lastRaw: GrokPluginConfig | undefined
   let lastGood: ReturnType<typeof resolveAdapterOptions> | undefined
 
@@ -109,7 +108,14 @@ export function apply(ctx: Context, config: GrokPluginConfig): void {
   }
 
   const adapter = new GrokAdapter({
-    options,
+    // Re-check the one registration-captured fact on every operation. DSH
+    // 0.1.7 derives the `llm-grok` settings page from the exported `Config`
+    // schema, so there is no section callback left to observe a retry-policy
+    // edit; the per-operation check keeps the old live behaviour.
+    options: () => {
+      ensureRegistrationFacts()
+      return options()
+    },
     resolveApiKey,
     resolveAttachments: () => ctx.get('attachments'),
   })
@@ -124,19 +130,10 @@ export function apply(ctx: Context, config: GrokPluginConfig): void {
 
   const registration = ctx.llm.registerAdapter([PROVIDER], adapter)
   let registeredPolicy = options().retryPolicy
-  const ensureRegistrationFacts = (): void => {
+  function ensureRegistrationFacts(): void {
     const policy = options().retryPolicy
     if (retryPolicyEquals(policy, registeredPolicy)) return
     registration.replace([PROVIDER])
     registeredPolicy = policy
   }
-
-  ctx.inject(['settings'], (settingsCtx) => {
-    settingsCtx.settings.installSection(ctx, NS, Config, config, {
-      setSource: (source: () => GrokPluginConfig) => {
-        current = source
-      },
-      onChange: ensureRegistrationFacts,
-    })
-  })
 }

@@ -64,7 +64,7 @@ test('text-only user messages stay a string and never touch attachments', async 
 // turn silently loses its system prompt.
 test('a loop-built request carries the system prompt as a leading system message', async () => {
   const body = await serializeRequest(options([
-    createSystemMessage('SYS-PROMPT', 'test-plugin'),
+    createSystemMessage('SYS-PROMPT'),
     createUserMessage({ content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' } }),
   ]), undefined, undefined)
 
@@ -90,7 +90,7 @@ test('a one-shot request maps options.system ahead of the messages', async () =>
 
 test('either system path emits exactly one system message, first', async () => {
   const user = createUserMessage({ content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' } })
-  const loopBuilt = await serializeRequest(options([createSystemMessage('SYS-PROMPT', 'test-plugin'), user]), undefined, undefined)
+  const loopBuilt = await serializeRequest(options([createSystemMessage('SYS-PROMPT'), user]), undefined, undefined)
   const oneShot = await serializeRequest({ ...options([user]), system: 'SYS-PROMPT' }, undefined, undefined)
 
   assert.deepEqual(loopBuilt.messages, oneShot.messages)
