@@ -108,6 +108,9 @@ x-grok-model-override: grok-4.6 | grok-4.5
           high: high
 ```
 
+`reasoningEfforts` 是可选档位映射：省略（或留空）表示该模型不暴露推理档位，
+DSH 的模型信息里就不会出现 reasoning 元数据。写了哪些键，就暴露哪些档位。
+
 ## 开发
 
 ```bash

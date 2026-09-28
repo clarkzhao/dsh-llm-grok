@@ -16,6 +16,7 @@ import {
   LlmError,
   RetryPolicySchema,
   assertUsableApiKey,
+  type AdapterRegistrationHandle,
 } from '@deepseek-ai/dsh-llm'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
@@ -128,12 +129,24 @@ export function apply(ctx: Context, config: GrokPluginConfig): void {
     settingsPath: [],
   }])
 
-  const registration = ctx.llm.registerAdapter([PROVIDER], adapter)
+  // `registerAdapter` reads the retry policy through `providerRetryPolicy` while
+  // it is still registering the route, so the captured policy has to exist
+  // before that call; reading it from inside the registration is a
+  // temporal-dead-zone error. The handle stays unset until registration
+  // returns, which keeps `ensureRegistrationFacts` inert during that window.
   let registeredPolicy = options().retryPolicy
+  let registration: AdapterRegistrationHandle | undefined
+
   function ensureRegistrationFacts(): void {
+    if (registration === undefined) return
     const policy = options().retryPolicy
     if (retryPolicyEquals(policy, registeredPolicy)) return
-    registration.replace([PROVIDER])
+    // Record the new policy *before* swapping the route: `replace` re-reads it
+    // through `providerRetryPolicy`, so a re-entrant call must already observe
+    // the new value instead of triggering another replacement forever.
     registeredPolicy = policy
+    registration.replace([PROVIDER])
   }
+
+  registration = ctx.llm.registerAdapter([PROVIDER], adapter)
 }

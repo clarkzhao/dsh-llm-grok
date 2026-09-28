@@ -47,3 +47,22 @@ test('resolveAdapterOptions rejects a duplicate catalog id', () => {
     /duplicate catalog model/,
   )
 })
+
+test('resolveAdapterOptions drops a catalog entry with no reasoning efforts', () => {
+  // `{}` is what the Config schema's dict default yields for a catalog entry
+  // that names none; forwarding it would advertise zero reasoning levels.
+  const resolved = resolveAdapterOptions({ models: [{ id: 'plain' }, { id: 'empty', reasoningEfforts: {} }] })
+  assert.deepEqual(resolved.models[0], {
+    id: 'plain',
+    name: 'plain',
+    contextWindow: 500000,
+    maxTokens: 128000,
+  })
+  assert.ok(!('reasoningEfforts' in resolved.models[0]!))
+  assert.ok(!('reasoningEfforts' in resolved.models[1]!))
+})
+
+test('resolveAdapterOptions keeps the reasoning efforts a catalog entry declares', () => {
+  const resolved = resolveAdapterOptions({ models: [{ id: 'reasoning', reasoningEfforts: { low: 'low' } }] })
+  assert.deepEqual(resolved.models[0]?.reasoningEfforts, { low: 'low' })
+})

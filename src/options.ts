@@ -68,12 +68,21 @@ function resolveModels(
   return (models ?? DEFAULT_MODELS).map(model => {
     if (seen.has(model.id)) throw new Error(`dsh-llm-grok: duplicate catalog model "${model.id}"`)
     seen.add(model.id)
+    const efforts = model.reasoningEfforts
     return {
       id: model.id,
       name: model.name ?? model.id,
       contextWindow: model.contextWindow ?? defaultContextWindow,
       maxTokens: model.maxTokens ?? defaultMaxTokens,
-      ...model.reasoningEfforts === undefined ? {} : { reasoningEfforts: { ...model.reasoningEfforts } },
+      // An absent map and an empty one mean the same thing here: the model
+      // exposes no reasoning levels. The Config schema's dict default hands an
+      // empty map to every catalog entry that declares none, so it has to be
+      // dropped rather than carried forward — downstream `modelInfoFor` would
+      // otherwise advertise zero efforts, which DSH rejects with
+      // INVALID_MODEL_REASONING.
+      ...efforts === undefined || Object.keys(efforts).length === 0
+        ? {}
+        : { reasoningEfforts: { ...efforts } },
     }
   })
 }

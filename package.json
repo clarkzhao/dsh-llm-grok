@@ -1,6 +1,6 @@
 {
   "name": "dsh-llm-grok",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Independent DeepSeek Harness plugin that adds Grok subscription as an LLM provider",
   "type": "module",
   "main": "lib/index.js",
@@ -25,6 +25,7 @@
     "prepare": "npm run build",
     "prepublishOnly": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pretest": "npm run build",
     "test": "node --experimental-strip-types --test tests/*.test.ts && python3 tests/sync-grok-credential.test.py"
   },
   "repository": {
