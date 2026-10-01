@@ -1,8 +1,12 @@
 # dsh-llm-grok bundle layer.
 # Installed via `dsh plugin --profile <name> add ./dsh-llm-grok`.
 #
-# Compatible with DSH 0.1.7-rc.2 (`@deepseek-ai/dsh-llm` prepareCall /
+# Compatible with DSH 0.2.0-rc.2 (`@deepseek-ai/dsh-llm` prepareCall /
 # attributionHeaders / settings namespace `llm-grok`).
+# The `@deepseek-ai/dsh*` peerDependencies range must cover the running dsh
+# version: 0.2.0 refuses to mount a bundle whose peers do not satisfy it, which
+# silently leaves the `grok` provider unregistered ("no adapter registered for
+# provider \"grok\"").
 # The plugin registers provider route `grok` on DSH's LLM seam.
 # If you previously added a `grok` provider through `llm-pi-ai` settings,
 # remove that pi-ai provider first to avoid a duplicate route.
