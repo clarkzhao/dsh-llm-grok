@@ -12,6 +12,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
+import { createVolatile } from '@deepseek-ai/cosmokit'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
 import { Config, apply, inject, name } from '../lib/index.js'
 
@@ -78,4 +79,24 @@ test('the configured catalog reaches the registered adapter', async () => {
   const info = await ctx.llm.resolveModelInfo('grok', 'grok-probe')
   assert.equal(info.id, 'grok-probe')
   assert.equal(info.name, 'Probe')
+})
+
+// Every field of `Config` is `.volatile()`, so the profile boot hands `apply`
+// a live `Volatile<T>` reference rather than a plain value. The mounts above
+// cannot see a read that forgets the reference, because they pass plain values.
+// `ctx.plugin` cannot reproduce it either: Cordis validates the raw config
+// before `apply`, and a reference is not a string. So this case calls `apply`
+// directly with the config shape app-boot really produces.
+test('a config delivered as live references resolves to their values', async () => {
+  const ctx = await llmContext()
+  apply(ctx, {
+    baseURL: createVolatile('https://grok.example.test/v1'),
+    models: createVolatile([{ id: 'grok-live', name: 'Live' }]),
+    retryPolicy: createVolatile({ mode: 'always', backoff: { maxDelayMs: 2000 } }),
+  } as never)
+
+  assert.deepEqual(
+    (await ctx.llm.listModels('grok')).map(model => model.id),
+    ['grok-live'],
+  )
 })
