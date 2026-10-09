@@ -16,10 +16,15 @@ import {
   LlmError,
   RetryPolicySchema,
   assertUsableApiKey,
-  type AdapterRegistrationHandle,
 } from '@deepseek-ai/dsh-llm'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
+import { isVolatile } from '@deepseek-ai/cosmokit'
+import type { Volatile } from '@deepseek-ai/cosmokit'
+// Type-only: brings the `loader/volatile-update` event declaration into the
+// program. The loader dispatches it to the owning fiber when a volatile field
+// is committed without a remount.
+import type {} from '@deepseek-ai/cordis-plugin-loader'
 import { GrokAdapter } from './adapter.js'
 import {
   DEFAULT_API_KEY_ENV,
@@ -49,15 +54,44 @@ const catalogModel = z.object({
   reasoningEfforts,
 })
 
-export const Config: z<GrokPluginConfig> = z.object({
-  baseURL: z.string().default(DEFAULT_BASE_URL),
-  apiKeyEnv: z.string().role('credential-ref').default(DEFAULT_API_KEY_ENV),
-  proxy: z.string().default(DEFAULT_PROXY),
-  defaultContextWindow: z.number().step(1).min(1).default(DEFAULT_CONTEXT_WINDOW),
-  defaultMaxTokens: z.number().step(1).min(1).default(DEFAULT_MAX_TOKENS),
-  models: z.array(catalogModel).default(DEFAULT_MODELS as never),
-  retryPolicy: RetryPolicySchema,
+// Every field is marked `.volatile()`. In DSH 0.2.0 the settings page is
+// derived from this schema by `SettingsForms.describe()`, which keeps only
+// fields under a `volatile` node (`volatileForm()`) and returns no descriptor
+// at all when none is marked — the `llm-grok` page silently disappears without
+// them. The marker also changes what `apply` receives: a volatile field
+// arrives as a live `Volatile<T>` reference, so reads go through `configValue`.
+export const Config = z.object({
+  baseURL: z.string().default(DEFAULT_BASE_URL).volatile(),
+  apiKeyEnv: z.string().role('credential-ref').default(DEFAULT_API_KEY_ENV).volatile(),
+  proxy: z.string().default(DEFAULT_PROXY).volatile(),
+  defaultContextWindow: z.number().step(1).min(1).default(DEFAULT_CONTEXT_WINDOW).volatile(),
+  defaultMaxTokens: z.number().step(1).min(1).default(DEFAULT_MAX_TOKENS).volatile(),
+  models: z.array(catalogModel).default(DEFAULT_MODELS as never).volatile(),
+  retryPolicy: RetryPolicySchema.volatile(),
 })
+
+/**
+ * Read the current value behind one config field. Validated config hands a
+ * volatile field over as a stable reference whose value the owning runtime
+ * updates, so the value is taken per read; an ordinary field passes through.
+ */
+function configValue<T>(field: T | Volatile<T> | undefined): T | undefined {
+  if (field === undefined) return undefined
+  return isVolatile(field) ? field.get() as T : field as T
+}
+
+/** Detach every field of a validated config into plain values. */
+function plainConfig(config: GrokPluginConfig): GrokPluginConfig {
+  return {
+    baseURL: configValue(config.baseURL),
+    apiKeyEnv: configValue(config.apiKeyEnv),
+    proxy: configValue(config.proxy),
+    defaultContextWindow: configValue(config.defaultContextWindow),
+    defaultMaxTokens: configValue(config.defaultMaxTokens),
+    models: configValue(config.models),
+    retryPolicy: configValue(config.retryPolicy),
+  }
+}
 
 function retryPolicyEquals(
   left: GrokConnectionOptions['retryPolicy'],
@@ -68,20 +102,24 @@ function retryPolicyEquals(
 
 export function apply(ctx: Context, config: GrokPluginConfig): void {
   const current = (): GrokPluginConfig => config
-  let lastRaw: GrokPluginConfig | undefined
+  let lastKey: string | undefined
   let lastGood: ReturnType<typeof resolveAdapterOptions> | undefined
 
+  // Volatile fields are live references, so the values are read on every call.
+  // The cache therefore keys on the resolved values, not on the config object's
+  // identity — that identity stays stable while its contents change.
   const options = (): ReturnType<typeof resolveAdapterOptions> => {
-    const raw = current()
-    if (raw === lastRaw && lastGood !== undefined) return lastGood
+    const raw = plainConfig(current())
+    const key = JSON.stringify(raw)
+    if (key === lastKey && lastGood !== undefined) return lastGood
     try {
       const next = resolveAdapterOptions(raw)
-      lastRaw = raw
+      lastKey = key
       lastGood = next
       return next
     } catch (error) {
       if (lastGood === undefined) throw error
-      lastRaw = raw
+      lastKey = key
       ctx.logger.error('dsh-llm-grok: keeping the last good configuration after an invalid settings section')
       ctx.logger.error(error)
       return lastGood
@@ -109,14 +147,7 @@ export function apply(ctx: Context, config: GrokPluginConfig): void {
   }
 
   const adapter = new GrokAdapter({
-    // Re-check the one registration-captured fact on every operation. DSH
-    // 0.1.7 derives the `llm-grok` settings page from the exported `Config`
-    // schema, so there is no section callback left to observe a retry-policy
-    // edit; the per-operation check keeps the old live behaviour.
-    options: () => {
-      ensureRegistrationFacts()
-      return options()
-    },
+    options,
     resolveApiKey,
     resolveAttachments: () => ctx.get('attachments'),
   })
@@ -129,24 +160,30 @@ export function apply(ctx: Context, config: GrokPluginConfig): void {
     settingsPath: [],
   }])
 
-  // `registerAdapter` reads the retry policy through `providerRetryPolicy` while
-  // it is still registering the route, so the captured policy has to exist
-  // before that call; reading it from inside the registration is a
-  // temporal-dead-zone error. The handle stays unset until registration
-  // returns, which keeps `ensureRegistrationFacts` inert during that window.
+  const registration = ctx.llm.registerAdapter([PROVIDER], adapter)
+  // Reading the policy after registration, never from inside it:
+  // `registerAdapter` calls `providerRetryPolicy` synchronously while it is
+  // still building the route, so touching `registeredPolicy` before this point
+  // is a temporal-dead-zone error.
   let registeredPolicy = options().retryPolicy
-  let registration: AdapterRegistrationHandle | undefined
 
-  function ensureRegistrationFacts(): void {
-    if (registration === undefined) return
-    const policy = options().retryPolicy
+  // The retry policy is the one registration-captured fact. DSH has no settings
+  // section callback any more; the loader publishes `loader/volatile-update`
+  // when a volatile field changes, which is the supported hook. Every other
+  // connection fact is read per operation, so it needs no notification.
+  ctx.on('loader/volatile-update', () => {
+    let policy: GrokConnectionOptions['retryPolicy']
+    try {
+      policy = options().retryPolicy
+    } catch (error) {
+      ctx.logger.warn(error)
+      return
+    }
     if (retryPolicyEquals(policy, registeredPolicy)) return
     // Record the new policy *before* swapping the route: `replace` re-reads it
     // through `providerRetryPolicy`, so a re-entrant call must already observe
-    // the new value instead of triggering another replacement forever.
+    // the new value instead of replacing forever.
     registeredPolicy = policy
     registration.replace([PROVIDER])
-  }
-
-  registration = ctx.llm.registerAdapter([PROVIDER], adapter)
+  })
 }
